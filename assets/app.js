@@ -75,13 +75,99 @@
     timelineList: document.getElementById("timeline-list"),
     btnUndoUsage: document.getElementById("btn-undo-usage"),
     toast: document.getElementById("toast"),
+    btnLogin: document.getElementById("btn-login"),
+    btnLogout: document.getElementById("btn-logout"),
+    authEmail: document.getElementById("auth-email"),
+    syncStatus: document.getElementById("sync-status"),
+    loginDialog: document.getElementById("login-dialog"),
+    loginForm: document.getElementById("login-form"),
+    loginEmail: document.getElementById("login-email"),
+    loginHint: document.getElementById("login-hint"),
+    btnLoginClose: document.getElementById("btn-login-close"),
+    btnLoginCancel: document.getElementById("btn-login-cancel"),
+    btnLoginSubmit: document.getElementById("btn-login-submit"),
   };
 
   let toastTimer = null;
+  let syncReady = false;
+  let reconcilePromise = null;
 
   function persist() {
     VocabStorage.saveItems(state.items);
     VocabStorage.saveSettings(state.settings);
+    if (syncReady && VocabSync.isSignedIn()) {
+      VocabSync.schedulePush(state.items, state.settings);
+    }
+  }
+
+  function normalizeLoadedSettings(settings) {
+    const next = { ...settings };
+    next.storySize = clampStorySize(next.storySize);
+    next.storySession = normalizeStorySession(next.storySession, {
+      itemIds: [],
+      selectedIds: [],
+      mode: next.recommendMode,
+      size: next.storySize,
+    });
+    return next;
+  }
+
+  function renderAuth() {
+    const signedIn = VocabSync.isSignedIn();
+    const user = VocabSync.getUser();
+    el.btnLogin.hidden = signedIn;
+    el.btnLogout.hidden = !signedIn;
+    el.authEmail.hidden = !signedIn;
+    el.authEmail.textContent = signedIn && user ? user.email || "已登录" : "";
+    if (!signedIn) {
+      el.syncStatus.hidden = true;
+      el.syncStatus.textContent = "";
+      el.syncStatus.classList.remove("is-error");
+    }
+  }
+
+  function setSyncStatus(text, isError) {
+    if (!text) {
+      el.syncStatus.hidden = true;
+      el.syncStatus.textContent = "";
+      return;
+    }
+    el.syncStatus.hidden = false;
+    el.syncStatus.textContent = text;
+    el.syncStatus.classList.toggle("is-error", Boolean(isError));
+  }
+
+  async function afterAuthChange() {
+    if (reconcilePromise) return reconcilePromise;
+    reconcilePromise = (async () => {
+      renderAuth();
+      if (!VocabSync.isSignedIn()) {
+        syncReady = true;
+        return;
+      }
+      setSyncStatus("同步中…");
+      try {
+        const result = await VocabSync.reconcile(state.items, state.settings);
+        state.items = result.items;
+        state.settings = normalizeLoadedSettings(result.settings);
+        renderAll();
+        if (result.action === "uploaded") toast("已上传本地数据到云端");
+        else if (result.action === "downloaded") toast("已从云端拉取数据");
+        else if (result.action === "merged") toast("已合并本地与云端数据");
+        setSyncStatus("已同步");
+      } catch (err) {
+        console.error(err);
+        setSyncStatus("同步失败", true);
+        toast("云端同步失败，请检查表与 RLS 是否已配置");
+      } finally {
+        syncReady = true;
+      }
+    })();
+    try {
+      await reconcilePromise;
+    } finally {
+      reconcilePromise = null;
+    }
   }
 
   function toast(message) {
@@ -702,19 +788,12 @@
         return;
       }
       state.items = VocabStorage.importPayload(payload);
-      state.settings = VocabStorage.loadSettings();
-      state.settings.storySize = clampStorySize(state.settings.storySize);
-      state.settings.storySession = normalizeStorySession(
-        state.settings.storySession,
-        {
-          itemIds: [],
-          selectedIds: [],
-          mode: state.settings.recommendMode,
-          size: state.settings.storySize,
-        }
-      );
+      state.settings = normalizeLoadedSettings(VocabStorage.loadSettings());
       resetForm();
       renderAll();
+      if (VocabSync.isSignedIn()) {
+        VocabSync.schedulePush(state.items, state.settings);
+      }
       toast("导入成功");
     } catch (err) {
       console.error(err);
@@ -722,8 +801,84 @@
     }
   });
 
+  function openLoginDialog() {
+    el.loginHint.textContent = "";
+    el.loginEmail.value = "";
+    el.loginDialog.showModal();
+    el.loginEmail.focus();
+  }
+
+  function closeLoginDialog() {
+    if (el.loginDialog.open) el.loginDialog.close();
+  }
+
+  el.btnLogin.addEventListener("click", openLoginDialog);
+  el.btnLoginClose.addEventListener("click", closeLoginDialog);
+  el.btnLoginCancel.addEventListener("click", closeLoginDialog);
+
+  el.loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    el.btnLoginSubmit.disabled = true;
+    el.loginHint.textContent = "发送中…";
+    try {
+      await VocabSync.signInWithEmail(el.loginEmail.value);
+      el.loginHint.textContent =
+        "登录链接已发送，请到邮箱点开（可检查垃圾箱）。本页可先关闭。";
+      toast("请查收登录邮件");
+    } catch (err) {
+      console.error(err);
+      el.loginHint.textContent = err.message || "发送失败";
+      toast("发送登录链接失败");
+    } finally {
+      el.btnLoginSubmit.disabled = false;
+    }
+  });
+
+  el.btnLogout.addEventListener("click", async () => {
+    try {
+      await VocabSync.flushPush();
+      await VocabSync.signOut();
+      renderAuth();
+      setSyncStatus("");
+      toast("已退出登录（本地数据仍保留）");
+    } catch (err) {
+      console.error(err);
+      toast("退出失败");
+    }
+  });
+
+  VocabSync.onChange((event, payload) => {
+    if (event === "auth") {
+      afterAuthChange();
+      return;
+    }
+    if (event === "sync") {
+      if (payload.state === "saving") setSyncStatus("同步中…");
+      else if (payload.state === "saved") setSyncStatus("已同步");
+      else if (payload.state === "error") {
+        setSyncStatus("同步失败", true);
+      }
+    }
+  });
+
   // 初始化
   el.recommendMode.value = state.settings.recommendMode;
   el.storySize.value = String(state.settings.storySize);
   renderAll();
+  renderAuth();
+
+  (async function bootSync() {
+    if (!VocabSync.isConfigured()) {
+      syncReady = true;
+      return;
+    }
+    try {
+      await VocabSync.init();
+      await afterAuthChange();
+    } catch (err) {
+      console.error(err);
+      syncReady = true;
+      setSyncStatus("同步初始化失败", true);
+    }
+  })();
 })();

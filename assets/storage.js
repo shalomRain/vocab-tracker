@@ -154,16 +154,72 @@
     return items;
   }
 
+  function mergeUsages(a, b) {
+    const set = new Set();
+    (a || []).forEach((u) => {
+      if (u && u.at) set.add(u.at);
+    });
+    (b || []).forEach((u) => {
+      if (u && u.at) set.add(u.at);
+    });
+    return Array.from(set)
+      .sort()
+      .map((at) => ({ at }));
+  }
+
+  /** 按 id 合并词条：文案取较新 updatedAt，usages 按时间戳去重并集 */
+  function mergeItems(localItems, remoteItems) {
+    const byId = new Map();
+
+    function ingest(raw) {
+      const item = normalizeItem(raw);
+      const existing = byId.get(item.id);
+      if (!existing) {
+        byId.set(item.id, item);
+        return;
+      }
+      const existingTime = new Date(existing.updatedAt).getTime() || 0;
+      const nextTime = new Date(item.updatedAt).getTime() || 0;
+      const newer = nextTime >= existingTime ? item : existing;
+      const older = newer === item ? existing : item;
+      byId.set(item.id, normalizeItem({
+        ...older,
+        ...newer,
+        createdAt:
+          new Date(older.createdAt) <= new Date(newer.createdAt)
+            ? older.createdAt
+            : newer.createdAt,
+        usages: mergeUsages(existing.usages, item.usages),
+        archived: newer.archived,
+      }));
+    }
+
+    (localItems || []).forEach(ingest);
+    (remoteItems || []).forEach(ingest);
+    return Array.from(byId.values());
+  }
+
+  function mergeSettings(localSettings, remoteSettings) {
+    return {
+      ...defaultSettings(),
+      ...(remoteSettings && typeof remoteSettings === "object" ? remoteSettings : {}),
+      ...(localSettings && typeof localSettings === "object" ? localSettings : {}),
+    };
+  }
+
   global.VocabStorage = {
     STORAGE_KEY,
     nowIso,
     uid,
+    defaultSettings,
     loadSettings,
     saveSettings,
     loadItems,
     saveItems,
     normalizeItem,
     mergeSeed,
+    mergeItems,
+    mergeSettings,
     exportPayload,
     importPayload,
   };

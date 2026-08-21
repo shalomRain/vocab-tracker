@@ -21,6 +21,12 @@
         <button type="button" class="view-btn" data-view="manage">管理</button>
       </nav>
       <div class="top-actions">
+        <div class="auth-box" id="auth-box">
+          <span class="sync-status" id="sync-status" hidden></span>
+          <span class="auth-email" id="auth-email" hidden></span>
+          <button type="button" class="ghost-btn" id="btn-login">登录同步</button>
+          <button type="button" class="ghost-btn" id="btn-logout" hidden>退出</button>
+        </div>
         <button type="button" class="ghost-btn" id="btn-export" title="导出 JSON">导出</button>
         <label class="ghost-btn file-label" title="导入 JSON">
           导入
@@ -147,10 +153,35 @@
     </form>
   </dialog>
 
+  <!-- 邮箱登录 -->
+  <dialog class="modal" id="login-dialog">
+    <form class="modal-card" id="login-form">
+      <header class="modal-head">
+        <h3>登录以同步</h3>
+        <button type="button" class="icon-btn" id="btn-login-close" aria-label="关闭">×</button>
+      </header>
+      <div class="modal-body">
+        <p class="timeline-summary">输入邮箱，我们会发送 Magic Link。点开邮件链接后即可在多设备同步学习记录。</p>
+        <label class="login-label">
+          邮箱
+          <input type="email" id="login-email" required placeholder="you@example.com" autocomplete="email" />
+        </label>
+        <p class="form-meta" id="login-hint"></p>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="ghost-btn" id="btn-login-cancel">取消</button>
+        <button type="submit" class="primary-btn" id="btn-login-submit">发送登录链接</button>
+      </footer>
+    </form>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./assets/config.js"></script>
   <script src="./assets/seed.js"></script>
   <script src="./assets/storage.js"></script>
+  <script src="./assets/sync.js"></script>
   <script src="./assets/app.js"></script>
 </body>
 </html>
