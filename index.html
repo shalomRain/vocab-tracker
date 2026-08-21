@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>英语学习台账</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <p class="brand-name">英语学习台账</p>
+        <p class="brand-sub">记录使用 · 按频率复习</p>
+      </div>
+      <nav class="view-switch" aria-label="视图切换">
+        <button type="button" class="view-btn is-active" data-view="learn">学习</button>
+        <button type="button" class="view-btn" data-view="manage">管理</button>
+      </nav>
+      <div class="top-actions">
+        <button type="button" class="ghost-btn" id="btn-export" title="导出 JSON">导出</button>
+        <label class="ghost-btn file-label" title="导入 JSON">
+          导入
+          <input type="file" id="input-import" accept="application/json,.json" hidden />
+        </label>
+      </div>
+    </header>
+
+    <main>
+      <!-- 学习端 -->
+      <section id="view-learn" class="view is-active">
+        <div class="toolbar">
+          <div class="tabs" id="learn-tabs" role="tablist">
+            <button type="button" class="tab is-active" data-filter="recommend">推荐</button>
+            <button type="button" class="tab" data-filter="story">故事</button>
+            <button type="button" class="tab" data-filter="word">单词</button>
+            <button type="button" class="tab" data-filter="phrase">短语</button>
+            <button type="button" class="tab" data-filter="conjunction">连词</button>
+            <button type="button" class="tab" data-filter="grammar">语法</button>
+          </div>
+          <div class="toolbar-right">
+            <div class="recommend-mode" id="recommend-mode-wrap">
+              <label for="recommend-mode">推荐策略</label>
+              <select id="recommend-mode">
+                <option value="least">少用优先</option>
+                <option value="stale">久未复习优先</option>
+                <option value="frequent">高频巩固</option>
+              </select>
+            </div>
+            <div class="story-controls" id="story-controls" hidden>
+              <label for="story-size">本局数量</label>
+              <input type="number" id="story-size" min="1" max="50" value="8" />
+              <button type="button" class="ghost-btn" id="btn-story-redraw">换一批</button>
+              <button type="button" class="ghost-btn" id="btn-story-clear">清空高亮</button>
+              <button type="button" class="primary-btn" id="btn-story-confirm">确认使用</button>
+            </div>
+          </div>
+        </div>
+        <p class="hint" id="learn-hint"></p>
+        <div class="card-grid" id="learn-list"></div>
+        <div class="story-deck" id="story-deck" hidden></div>
+      </section>
+
+      <!-- 管理端 -->
+      <section id="view-manage" class="view">
+        <div class="manage-layout">
+          <form class="item-form" id="item-form">
+            <h2 class="panel-title" id="form-title">新增词条</h2>
+            <input type="hidden" id="form-id" />
+            <label>
+              分类
+              <select id="form-type" required>
+                <option value="word">单词</option>
+                <option value="phrase">短语</option>
+                <option value="conjunction">连词</option>
+                <option value="grammar">语法</option>
+              </select>
+            </label>
+            <label>
+              标题
+              <input type="text" id="form-title-input" required placeholder="如 disagree / use sth to do sth" />
+            </label>
+            <label>
+              详细内容
+              <textarea id="form-content" rows="6" placeholder="例句、解释、语法说明…"></textarea>
+            </label>
+            <label>
+              提示词
+              <textarea id="form-prompt" rows="2" placeholder="造句 / 讲故事时的引导语"></textarea>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="primary-btn" id="form-submit">保存</button>
+              <button type="button" class="ghost-btn" id="form-reset">清空 / 新建</button>
+            </div>
+            <p class="form-meta" id="form-meta"></p>
+          </form>
+
+          <div class="manage-list-panel">
+            <div class="toolbar">
+              <div class="tabs" id="manage-tabs">
+                <button type="button" class="tab is-active" data-manage-filter="all">全部</button>
+                <button type="button" class="tab" data-manage-filter="word">单词</button>
+                <button type="button" class="tab" data-manage-filter="phrase">短语</button>
+                <button type="button" class="tab" data-manage-filter="conjunction">连词</button>
+                <button type="button" class="tab" data-manage-filter="grammar">语法</button>
+                <button type="button" class="tab" data-manage-filter="archived">已归档</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>标题</th>
+                    <th>分类</th>
+                    <th>次数</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="manage-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 使用时间线 -->
+  <dialog class="modal" id="timeline-dialog">
+    <form method="dialog" class="modal-card">
+      <header class="modal-head">
+        <h3 id="timeline-title">使用记录</h3>
+        <button type="submit" class="icon-btn" aria-label="关闭">×</button>
+      </header>
+      <div class="modal-body">
+        <p class="timeline-summary" id="timeline-summary"></p>
+        <ol class="timeline-list" id="timeline-list"></ol>
+      </div>
+      <footer class="modal-foot">
+        <button type="button" class="ghost-btn" id="btn-undo-usage">撤销最近一次</button>
+        <button type="submit" class="primary-btn">关闭</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="./assets/seed.js"></script>
+  <script src="./assets/storage.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>
